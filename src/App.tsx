@@ -13,6 +13,11 @@ function App() {
   const [savedContent, setSavedContent] = useState("");
   const previewRef = useRef<HTMLDivElement>(null);
 
+  // Editor/Preview split ratio (percentage of editor within the right area)
+  const [editorRatio, setEditorRatio] = useState(50);
+  const isDragging = useRef(false);
+  const rightAreaRef = useRef<HTMLDivElement>(null);
+
   const isModified = content !== savedContent;
 
   // Open folder dialog
@@ -67,7 +72,6 @@ function App() {
         filters: [{ name: "Markdown", extensions: ["md"] }],
       });
       if (selected && typeof selected === "string") {
-        // Save an empty file then open it
         await invoke("save_file", { path: selected, content: "" });
         setCurrentFilePath(selected);
         setContent("");
@@ -95,8 +99,40 @@ function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleSave]);
 
+  // Drag resize for editor/preview splitter
+  const handleMouseDown = useCallback(() => {
+    isDragging.current = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, []);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging.current || !rightAreaRef.current) return;
+      const rect = rightAreaRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const pct = Math.min(80, Math.max(20, (x / rect.width) * 100));
+      setEditorRatio(pct);
+    };
+
+    const handleMouseUp = () => {
+      if (isDragging.current) {
+        isDragging.current = false;
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, []);
+
   return (
-    <div className="flex flex-col h-screen overflow-hidden">
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
       {/* Header */}
       <Header
         currentFilePath={currentFilePath}
@@ -108,9 +144,9 @@ function App() {
       />
 
       {/* Main content area */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left pane - File tree (20%) */}
-        <div className="w-[20%] min-w-[180px] max-w-[320px] flex-shrink-0">
+      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+        {/* Left pane - File tree (fixed width) */}
+        <div style={{ width: 220, flexShrink: 0, borderRight: "1px solid var(--color-border)" }}>
           <FileTree
             rootPath={rootPath}
             onFileSelect={handleFileSelect}
@@ -118,14 +154,33 @@ function App() {
           />
         </div>
 
-        {/* Center pane - Editor (40%) */}
-        <div className="flex-1 border-r border-[var(--color-border)]">
-          <Editor content={content} onChange={setContent} />
-        </div>
+        {/* Right area: Editor + Splitter + Preview */}
+        <div ref={rightAreaRef} style={{ display: "flex", flex: 1, overflow: "hidden", position: "relative" }}>
+          {/* Editor */}
+          <div style={{ width: `${editorRatio}%`, overflow: "hidden" }}>
+            <Editor content={content} onChange={setContent} />
+          </div>
 
-        {/* Right pane - Preview (40%) */}
-        <div className="flex-1">
-          <Preview content={content} previewRef={previewRef} />
+          {/* Drag splitter */}
+          <div
+            onMouseDown={handleMouseDown}
+            style={{
+              width: 6,
+              flexShrink: 0,
+              cursor: "col-resize",
+              background: "var(--color-border)",
+              transition: "background 0.15s",
+              position: "relative",
+              zIndex: 10,
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = "var(--color-accent)"; }}
+            onMouseLeave={(e) => { if (!isDragging.current) (e.currentTarget as HTMLDivElement).style.background = "var(--color-border)"; }}
+          />
+
+          {/* Preview */}
+          <div style={{ flex: 1, overflow: "hidden" }}>
+            <Preview content={content} previewRef={previewRef} />
+          </div>
         </div>
       </div>
     </div>
