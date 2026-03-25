@@ -82,8 +82,31 @@ function App() {
     }
   }, []);
 
-  // PDF export via window.print()
+  // PDF export — clone preview content into body for proper multi-page pagination
   const handleExportPdf = useCallback(() => {
+    const printArea = document.querySelector('.print-area');
+    if (!printArea) return;
+
+    // Create a standalone print container in normal document flow
+    const printContainer = document.createElement('div');
+    printContainer.className = 'pdf-print-container markdown-preview';
+    printContainer.innerHTML = printArea.innerHTML;
+
+    // Hide app, add print container directly to body
+    const root = document.getElementById('root');
+    if (root) root.style.display = 'none';
+    document.body.appendChild(printContainer);
+
+    // Cleanup after print dialog closes
+    const cleanup = () => {
+      if (document.body.contains(printContainer)) {
+        document.body.removeChild(printContainer);
+      }
+      if (root) root.style.display = '';
+      window.removeEventListener('afterprint', cleanup);
+    };
+    window.addEventListener('afterprint', cleanup);
+
     window.print();
   }, []);
 
